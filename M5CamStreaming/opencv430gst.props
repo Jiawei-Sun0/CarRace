@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <IncludePath>D:\SDK\OpenCV4.3.0_Gstreamer\include;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\SDK\OpenCV4.3.0_Gstreamer\x64\vc16\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'">
+    <IncludePath>D:\SDK\OpenCV4.3.0_Gstreamer\include;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\SDK\OpenCV4.3.0_Gstreamer\x86\vc16\lib\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup />
+  <ItemGroup />
+</Project>

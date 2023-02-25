@@ -347,7 +347,7 @@ bool CSerialPort::WriteData(unsigned char* pData, int length)
 	EnterCriticalSection(&m_csCommunicationSync);
 
 	/** 向缓冲区写入指定量的数据 保护缓存区默认为8*/ 
-	bResult = WriteFile(m_hComm,/*文件句柄*/pData,/*用于保存读入数据的一个缓冲区*/ 2,/*要读入的字符数*/ &BytesToSend,/*指向实际读取字节数的指针*/ NULL);
+	bResult = WriteFile(m_hComm,/*文件句柄*/pData,/*用于保存读入数据的一个缓冲区*/ 8,/*要读入的字符数*/ &BytesToSend,/*指向实际读取字节数的指针*/ NULL);
 	if (!bResult)
 	{
 		DWORD dwError = GetLastError();

@@ -17,24 +17,34 @@ HANDLE com;
 OVERLAPPED sendOverlapped, recieveOverlapped;
 bool if_Lmousedown = false;
 bool if_Rmousedown = false;
-char mark = 'p';
-int maxSpeed = 80;
-int minSpeed = 20;
+bool autocontrol = false;
+int direction = 0; // 0:left 1:right 2:middel
+int markx = 0;
+int marky = 0;
+int ox;
+int oy;
+float markf = 0;
+int maxSpeed = 65;
+int minSpeed = 21;
+int turningAngle = 5;
+int BLcount = 0;
+int BRcount = 0;
 int speedL = 0;
 int speedR = 0;
 int bound = 720 / 2;
 #pragma warning(disable : 4996)
 
 void sendData() {
-	// dont know why,but when pass the positive value to the port, it update rate will be weird.
+
 	while (1) {
 		string str = to_string(speedR) + "," + to_string(speedL) + "\n";
 		DWORD length;
 		WriteFile(com, str.c_str(), str.length(), &length, &sendOverlapped);
-		cout << "send:" << str << endl;
-		Sleep(100);
+		//cout << "send:" << str << endl;
+		Sleep(200);
 	}
 
+	// dont know why,but when pass the positive value to the port, it update rate will be weird.
 	/*unsigned char* senddata = (unsigned char*)str.data();
 	if (port.WriteData(senddata, sizeof(senddata))) {
 		cout << "send:" << senddata << endl;
@@ -42,6 +52,93 @@ void sendData() {
 	else {
 		cout << "send failed." << endl;
 	}*/
+}
+
+void calculateSpeed(cv::Mat img, int x, int y) {
+	ox = img.cols / 2;
+	oy = img.rows;
+	for (int i = img.rows * 0.85; i < img.rows * 0.88; i++) { //y
+		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
+		for (int j = 0; j < img.cols; j++) { // x
+			if (p[j][0] == 255) {
+				ox = j;
+				oy = i;
+				break;
+			}
+		}
+	}
+	cv::Point origin = cv::Point(ox, oy);
+	markx = x;
+	marky = y;
+	float end1 = 0.1;
+	if (x > ox+end1*img.cols) {
+		direction = 1;
+	}
+	else if (x > ox - img.cols * end1 && x < ox + img.cols * end1) {
+		direction = 2;
+	}
+	else {
+		direction = 0;
+	}
+	//if (y > img.rows * 0.5) {
+	//	if (BLcount > BRcount) {
+	//		speedL = 20;
+	//		speedR = 60;
+	//	}
+	//	else if (BLcount < BRcount) {
+	//		speedL = 60;
+	//		speedR = 20;		
+	//	}
+	//	return;
+	//}
+	int edge0 = abs(origin.x - x);
+	//int edge1 = abs(origin.y - y);
+	//int edge2 = sqrt(pow(edge0, 2) + pow(edge1, 2));
+	float percent = (origin.x-img.cols/2)/(img.cols/2.0);
+	markf = percent;
+	if (direction == 0) {
+		int s = turningAngle * percent;
+		speedL = minSpeed + s;
+		speedR = maxSpeed;
+		if (speedL < 12)
+			speedL = 12;
+	}
+	else if (direction == 1) {
+		int s = turningAngle * percent;
+		speedL = maxSpeed;
+		speedR = minSpeed + s;
+		if (speedR < 12)
+			speedR = 12;
+	}
+	else if (direction == 2) {
+		speedL = 30;
+		speedR = 30;
+	}
+	return;
+}
+
+void setSpeedByRed(cv::Mat img) {
+	bool find = false;
+	int minx = img.cols;
+	int miny = img.rows;
+	int maxx = 0;
+	int maxy = 0;
+	for (int i = img.rows*0.45; i < img.rows*0.75; i++) { //y
+		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
+		for (int j = 0; j < img.cols; j++) { // x
+			if (p[j][0] == 255) {
+				find = true;
+				calculateSpeed(img, j, i);
+				break;
+			}
+		}
+		if (find)
+			break;
+	}
+	if (!find) {
+		speedL = 0;
+		speedR = 0;
+	}
 }
 
 
@@ -52,7 +149,7 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 	case CV_EVENT_MOUSEMOVE: // CV_EVENT_MOUSEMOVE
 	{
 		//cout << x << ":" << y << endl;
-		if (if_Lmousedown) {
+		if (if_Lmousedown && !autocontrol) {
 			if (x > bound) {
 				speedR = maxSpeed - (maxSpeed - minSpeed) * (x - bound) / bound;
 				if (speedR < minSpeed)
@@ -68,7 +165,7 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 			}
 			//sendData();
 		}
-		if (if_Rmousedown) {
+		if (if_Rmousedown && !autocontrol) {
 			if (x > bound) {
 				speedR = -maxSpeed + (maxSpeed - minSpeed) * (x - bound) / bound;
 				if (speedR > -minSpeed)
@@ -88,36 +185,64 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 	}
 	case CV_EVENT_LBUTTONDOWN: // CV_EVENT_LBUTTONDOWN
 		if_Lmousedown = true;
-		speedR = maxSpeed;
-		speedL = maxSpeed;
+		if (!autocontrol) {
+			speedR = maxSpeed;
+			speedL = maxSpeed;
+		}
 		//sendData();
 		break;
 	case CV_EVENT_LBUTTONUP:
 		if_Lmousedown = false;
-		speedR = 0;
-		speedL = 0;
+		if (!autocontrol) {
+			speedR = 0;
+			speedL = 0;
+		}
 		//sendData();
 		break;
 	case CV_EVENT_RBUTTONDOWN:
 		if_Rmousedown = true;
-		speedR = -maxSpeed;
-		speedL = -maxSpeed;
+		if (!autocontrol) {
+			speedR = -maxSpeed;
+			speedL = -maxSpeed;
+		}
 		//sendData();
 		break;
 	case CV_EVENT_RBUTTONUP:
 		if_Rmousedown = false;
-		speedR = 0;
-		speedL = 0;
+		if (!autocontrol) {
+			speedR = 0;
+			speedL = 0;
+		}
 		//sendData();
 		break;
+	case CV_EVENT_MBUTTONDOWN:
+		if (autocontrol) {
+			autocontrol = false;
+			speedR = 0;
+			speedL = 0;
+		}
+		else
+			autocontrol = true;
+		cout << autocontrol << endl;
 	default:
 		break;
 	}
 }
+
+void setColor(cv::Vec3b* img,int index, int b, int g, int r) {
+	img[index][0] = b; //blue
+	img[index][1] = g; //green
+	img[index][2] = r; //red
+}
+
+void setColor(uchar* img, int index, int v) {
+	img[index] = v;
+}
+
 int main() {
 	
-	//cap.open("http://unitv2.py/video_feed");
-	cap.open(0);
+	cap.open("http://unitv2.py/video_feed");
+	//cap.open(0);
 	if (!cap.isOpened()) {
 		std::cout << "Can't open camera." << std::endl;
 		std::cin.get();
@@ -145,19 +270,66 @@ int main() {
 
 	SetCommState(com, &dcb); // 変更した設定値を書き込み
 	
+	//cv::Mat test = cv::imread("1.png");
 	
-	/*if (!port.InitPort(5,CBR_115200,'N',8,1,EV_RXCHAR)) {
-		std::cout << "Init serial port succeeded." << std::endl;
-	}
-	else {
-		std::cout << "Init serial port failed." << std::endl;
-	}*/
 
 	thread sending(sendData);
 	while (true) {
 		cv::resizeWindow(WINDOW_NAME, cv::Size(720, 480));
 		cv::Mat img;
 		if (cap.read(img)) {
+
+			if (autocontrol) {
+				BLcount = 0;
+				BRcount = 0;
+				cv::Mat redline = img.clone();
+				cv::Mat blackline = img.clone();
+				//cv::cvtColor(redline, redline, cv::COLOR_BGR2GRAY);
+				for (int i = 0; i < img.rows; i++) { //y
+					cv::Vec3b* pOrigin = redline.ptr<cv::Vec3b>(i);
+					//BGR TYPE
+					cv::Vec3b* p3 = redline.ptr<cv::Vec3b>(i);
+					//cv::Vec3b* p3b = blackline.ptr<cv::Vec3b>(i);
+
+					for (int j = 0; j < img.cols; j++) { // x
+						if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] > 150) {
+							//redline.at<uchar>(i, j) = 255;
+							setColor(p3, j, 255, 255, 255);
+							//setColor(p3b, j, 0, 0, 0);
+						}
+						//else if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] < 120) {
+						//	//redline.at<uchar>(i, j) = 0;
+						//	setColor(p3, j, 0, 0, 0);
+						//	//setColor(p3b, j, 255, 255, 255);
+						//	//if (j > img.cols / 2) {
+						//	//	BRcount++;
+						//	//}
+						//	//else {
+						//	//	BLcount++;
+						//	//}
+						//}
+						else {
+							//redline.at<uchar>(i, j) = 0;
+							setColor(p3, j, 0, 0, 0);
+							//setColor(p3b, j, 0, 0, 0);
+						}
+					}
+				}
+				setSpeedByRed(redline);
+			}
+
+			// putText into picture
+			cv::String str = "L:" + to_string(speedL) + "  R:" + to_string(speedR) + " Dir:" + to_string(direction)
+				+ " x:"+to_string(markx)+",y:"+to_string(marky) + " factor:"+to_string(markf);
+			cv::Point origin;
+			int baseline;
+			cv::Size size = cv::getTextSize(str, cv::FONT_HERSHEY_SIMPLEX, 1, 2,&baseline);
+			origin.x = 0;
+			origin.y = size.height;
+			cv::putText(img, str, origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2, 8, 0);
+			 
+			cv::rectangle(img, cv::Point(markx - 10, marky - 10), cv::Point(markx + 10, marky + 10), (255, 0, 0), 6);
+			cv::rectangle(img, cv::Point(ox - 10, oy - 10), cv::Point(ox + 10, oy + 10), (0, 125, 0),2);
 			cv::imshow(WINDOW_NAME, img);
 			if (cv::waitKey(1) == 27) break;
 		}
@@ -175,6 +347,13 @@ int main() {
 //int count = 0;
 //unsigned char* str = new unsigned char[5];// 由于数据接受间隔，5更能无缝衔接，并将writedata的保护缓冲区改为2
 //unsigned char* strNUM = new unsigned char[20];
+// 
+// 	/*if (!port.InitPort(5,CBR_115200,'N',8,1,EV_RXCHAR)) {
+//std::cout << "Init serial port succeeded." << std::endl;
+//	}
+//	else {
+//	std::cout << "Init serial port failed." << std::endl;
+//	}*/
 // 
 //if (_kbhit()) {
 //

@@ -15,17 +15,19 @@ cv::VideoCapture cap;
 //CSerialPort port;
 HANDLE com;
 OVERLAPPED sendOverlapped, recieveOverlapped;
+int adjust = 0;
 bool if_Lmousedown = false;
 bool if_Rmousedown = false;
 bool autocontrol = false;
 int direction = 0; // 0:left 1:right 2:middel
+cv::Mat img;
 int markx = 0;
 int marky = 0;
 int ox;
 int oy;
 float markf = 0;
-int maxSpeed = 65;
-int minSpeed = 21;
+int maxSpeed = 58;
+int minSpeed = 22 + adjust * 0.3;
 int turningAngle = 5;
 int BLcount = 0;
 int BRcount = 0;
@@ -33,6 +35,8 @@ int speedL = 0;
 int speedR = 0;
 int bound = 720 / 2;
 #pragma warning(disable : 4996)
+
+
 
 void sendData() {
 
@@ -57,6 +61,8 @@ void sendData() {
 void calculateSpeed(cv::Mat img, int x, int y) {
 	ox = img.cols / 2;
 	oy = img.rows;
+	int midx = 0;
+	int midy = 0;
 	for (int i = img.rows * 0.85; i < img.rows * 0.88; i++) { //y
 		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
 		for (int j = 0; j < img.cols; j++) { // x
@@ -67,15 +73,38 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 			}
 		}
 	}
+	for (int i = img.rows * 0.67; i < img.rows * 0.70; i++) { //y
+		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
+		for (int j = 0; j < img.cols; j++) { // x
+			if (p[j][0] == 255) {
+				midx = j;
+				midy = i;
+				break;
+			}
+		}
+	}
 	cv::Point origin = cv::Point(ox, oy);
 	markx = x;
 	marky = y;
-	float end1 = 0.1;
-	if (x > ox+end1*img.cols) {
-		direction = 1;
+	float end1 = 0.05;
+	if ((direction == 0 || direction == 1) && (ox + x) / 2 + 20 > midx && (ox + x) / 2 - 20 < midx && (oy + y) / 2 + 20 > midy && (oy + y) / 2 - 20 < midy) {
+		speedL = 0;
+		speedR = 0;
+		Sleep(100);
+		if (direction == 1) {
+			speedL = 30;
+			speedR = 20;
+		}
+		else if (direction == 0) {
+			speedL = 20;
+			speedR = 30;
+		}
 	}
-	else if (x > ox - img.cols * end1 && x < ox + img.cols * end1) {
+	if (x > ox - img.cols * end1 && x < ox + img.cols * end1) {
 		direction = 2;
+	}
+	else if (x > ox + end1 * img.cols) {
+		direction = 1;
 	}
 	else {
 		direction = 0;
@@ -97,6 +126,12 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 	float percent = (origin.x-img.cols/2)/(img.cols/2.0);
 	markf = percent;
 	if (direction == 0) {
+		if (speedL == 0) {
+			speedL = 30;
+			speedR = 30 + adjust;
+			Sleep(500);
+			return;
+		}
 		int s = turningAngle * percent;
 		speedL = minSpeed + s;
 		speedR = maxSpeed;
@@ -104,6 +139,12 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 			speedL = 12;
 	}
 	else if (direction == 1) {
+		if (speedR == 0) {
+			speedL = 30;
+			speedR = 30 + adjust;
+			Sleep(100);
+			return;
+		}
 		int s = turningAngle * percent;
 		speedL = maxSpeed;
 		speedR = minSpeed + s;
@@ -112,7 +153,7 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 	}
 	else if (direction == 2) {
 		speedL = 30;
-		speedR = 30;
+		speedR = 30 + adjust;
 	}
 	return;
 }
@@ -123,7 +164,7 @@ void setSpeedByRed(cv::Mat img) {
 	int miny = img.rows;
 	int maxx = 0;
 	int maxy = 0;
-	for (int i = img.rows*0.45; i < img.rows*0.75; i++) { //y
+	for (int i = img.rows*0.5; i < img.rows*0.75; i++) { //y
 		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
 		for (int j = 0; j < img.cols; j++) { // x
 			if (p[j][0] == 255) {
@@ -239,6 +280,35 @@ void setColor(uchar* img, int index, int v) {
 	img[index] = v;
 }
 
+void control() {
+	while (1) {
+		if (autocontrol) {
+			BLcount = 0;
+			BRcount = 0;
+			cv::Mat redline = img.clone();
+			cv::Mat blackline = img.clone();
+			//cv::cvtColor(redline, redline, cv::COLOR_BGR2GRAY);
+			for (int i = 0; i < img.rows; i++) { //y
+				cv::Vec3b* pOrigin = redline.ptr<cv::Vec3b>(i);
+				//BGR TYPE
+				cv::Vec3b* p3 = redline.ptr<cv::Vec3b>(i);
+				//cv::Vec3b* p3b = blackline.ptr<cv::Vec3b>(i);
+
+				for (int j = 0; j < img.cols; j++) { // x
+					if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] > 150) {
+						setColor(p3, j, 255, 255, 255);
+					}
+					else {
+						setColor(p3, j, 0, 0, 0);
+					}
+				}
+			}
+			setSpeedByRed(redline);
+			Sleep(500);
+		}
+	}
+}
+
 int main() {
 	
 	cap.open("http://unitv2.py/video_feed");
@@ -274,49 +344,35 @@ int main() {
 	
 
 	thread sending(sendData);
+	thread controling(control);
 	while (true) {
 		cv::resizeWindow(WINDOW_NAME, cv::Size(720, 480));
-		cv::Mat img;
-		if (cap.read(img)) {
+		cv::Mat showimg;
+		if (cap.read(showimg)) {
+			img = showimg.clone();
+			//if (autocontrol) {
+			//	BLcount = 0;
+			//	BRcount = 0;
+			//	cv::Mat redline = img.clone();
+			//	cv::Mat blackline = img.clone();
+			//	//cv::cvtColor(redline, redline, cv::COLOR_BGR2GRAY);
+			//	for (int i = 0; i < img.rows; i++) { //y
+			//		cv::Vec3b* pOrigin = redline.ptr<cv::Vec3b>(i);
+			//		//BGR TYPE
+			//		cv::Vec3b* p3 = redline.ptr<cv::Vec3b>(i);
+			//		//cv::Vec3b* p3b = blackline.ptr<cv::Vec3b>(i);
 
-			if (autocontrol) {
-				BLcount = 0;
-				BRcount = 0;
-				cv::Mat redline = img.clone();
-				cv::Mat blackline = img.clone();
-				//cv::cvtColor(redline, redline, cv::COLOR_BGR2GRAY);
-				for (int i = 0; i < img.rows; i++) { //y
-					cv::Vec3b* pOrigin = redline.ptr<cv::Vec3b>(i);
-					//BGR TYPE
-					cv::Vec3b* p3 = redline.ptr<cv::Vec3b>(i);
-					//cv::Vec3b* p3b = blackline.ptr<cv::Vec3b>(i);
-
-					for (int j = 0; j < img.cols; j++) { // x
-						if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] > 150) {
-							//redline.at<uchar>(i, j) = 255;
-							setColor(p3, j, 255, 255, 255);
-							//setColor(p3b, j, 0, 0, 0);
-						}
-						//else if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] < 120) {
-						//	//redline.at<uchar>(i, j) = 0;
-						//	setColor(p3, j, 0, 0, 0);
-						//	//setColor(p3b, j, 255, 255, 255);
-						//	//if (j > img.cols / 2) {
-						//	//	BRcount++;
-						//	//}
-						//	//else {
-						//	//	BLcount++;
-						//	//}
-						//}
-						else {
-							//redline.at<uchar>(i, j) = 0;
-							setColor(p3, j, 0, 0, 0);
-							//setColor(p3b, j, 0, 0, 0);
-						}
-					}
-				}
-				setSpeedByRed(redline);
-			}
+			//		for (int j = 0; j < img.cols; j++) { // x
+			//			if (pOrigin[j][0] < 120 && pOrigin[j][1] < 120 && pOrigin[j][2] > 150) {
+			//				setColor(p3, j, 255, 255, 255);
+			//			}
+			//			else {
+			//				setColor(p3, j, 0, 0, 0);
+			//			}
+			//		}
+			//	}
+			//	setSpeedByRed(redline);
+			//}
 
 			// putText into picture
 			cv::String str = "L:" + to_string(speedL) + "  R:" + to_string(speedR) + " Dir:" + to_string(direction)
@@ -326,11 +382,11 @@ int main() {
 			cv::Size size = cv::getTextSize(str, cv::FONT_HERSHEY_SIMPLEX, 1, 2,&baseline);
 			origin.x = 0;
 			origin.y = size.height;
-			cv::putText(img, str, origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2, 8, 0);
+			cv::putText(showimg, str, origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2, 8, 0);
 			 
-			cv::rectangle(img, cv::Point(markx - 10, marky - 10), cv::Point(markx + 10, marky + 10), (255, 0, 0), 6);
-			cv::rectangle(img, cv::Point(ox - 10, oy - 10), cv::Point(ox + 10, oy + 10), (0, 125, 0),2);
-			cv::imshow(WINDOW_NAME, img);
+			cv::rectangle(showimg, cv::Point(markx - 10, marky - 10), cv::Point(markx + 10, marky + 10), (255, 0, 0), 6);
+			cv::rectangle(showimg, cv::Point(ox - 10, oy - 10), cv::Point(ox + 10, oy + 10), (0, 125, 0),2);
+			cv::imshow(WINDOW_NAME, showimg);
 			if (cv::waitKey(1) == 27) break;
 		}
 	}

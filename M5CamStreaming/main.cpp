@@ -26,9 +26,9 @@ int marky = 0;
 int ox;
 int oy;
 float markf = 0;
-int maxSpeed = 58;
-int minSpeed = 22 + adjust * 0.3;
-int turningAngle = 5;
+int maxSpeed = 30;
+int minSpeed = 19 + adjust * 0.2;
+int turningAngle = -6;
 int BLcount = 0;
 int BRcount = 0;
 int speedL = 0;
@@ -40,13 +40,11 @@ int bound = 720 / 2;
 
 void sendData() {
 
-	while (1) {
-		string str = to_string(speedR) + "," + to_string(speedL) + "\n";
-		DWORD length;
-		WriteFile(com, str.c_str(), str.length(), &length, &sendOverlapped);
-		//cout << "send:" << str << endl;
-		Sleep(200);
-	}
+	string str = to_string(speedR) + "," + to_string(speedL) + "\n";
+	DWORD length;
+	WriteFile(com, str.c_str(), str.length(), &length, &sendOverlapped);
+	//cout << "send:" << str << endl;
+	//Sleep(200);
 
 	// dont know why,but when pass the positive value to the port, it update rate will be weird.
 	/*unsigned char* senddata = (unsigned char*)str.data();
@@ -63,50 +61,54 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 	oy = img.rows;
 	int midx = 0;
 	int midy = 0;
-	for (int i = img.rows * 0.85; i < img.rows * 0.88; i++) { //y
+	for (int i = img.rows * 0.9; i < img.rows * 0.92; i++) { //y 
+		bool find = false;
 		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
 		for (int j = 0; j < img.cols; j++) { // x
 			if (p[j][0] == 255) {
+				find = true;
 				ox = j;
 				oy = i;
 				break;
 			}
 		}
-	}
-	for (int i = img.rows * 0.67; i < img.rows * 0.70; i++) { //y
-		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
-		for (int j = 0; j < img.cols; j++) { // x
-			if (p[j][0] == 255) {
-				midx = j;
-				midy = i;
-				break;
-			}
+		if (find) {
+			break;
 		}
 	}
+	//for (int i = img.rows * 0.6; i < img.rows * 0.62; i++) { //y
+	//	bool find = false;
+	//	cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
+	//	for (int j = 0; j < img.cols; j++) { // x
+	//		if (p[j][0] == 255) {
+	//			find = true;
+	//			midx = j;
+	//			midy = i;
+	//			break;
+	//		}
+	//	}
+	//	if (find) {
+	//		break;
+	//	}
+	//}
 	cv::Point origin = cv::Point(ox, oy);
 	markx = x;
 	marky = y;
-	float end1 = 0.05;
+	float end1 = 0.15;
+	// Íä×ªÖ±Ïß
 	if ((direction == 0 || direction == 1) && (ox + x) / 2 + 20 > midx && (ox + x) / 2 - 20 < midx && (oy + y) / 2 + 20 > midy && (oy + y) / 2 - 20 < midy) {
 		speedL = 0;
 		speedR = 0;
-		Sleep(100);
-		if (direction == 1) {
-			speedL = 30;
-			speedR = 20;
-		}
-		else if (direction == 0) {
-			speedL = 20;
-			speedR = 30;
-		}
+		sendData();
+		Sleep(200);
 	}
-	if (x > ox - img.cols * end1 && x < ox + img.cols * end1) {
+	if (x > ox - img.cols * end1 && x < ox + img.cols * end1 && ox < img.cols*(0.5+end1) && ox > img.cols*(0.5-end1)) {
 		direction = 2;
 	}
-	else if (x > ox + end1 * img.cols) {
+	else if (x > ox + end1 * img.cols || ox > img.cols*(0.5 + end1)) {
 		direction = 1;
 	}
-	else {
+	else if (x < ox - end1 * img.cols || ox < img.cols*(0.5 - end1)) {
 		direction = 0;
 	}
 	//if (y > img.rows * 0.5) {
@@ -120,15 +122,16 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 	//	}
 	//	return;
 	//}
-	int edge0 = abs(origin.x - x);
+	
+	//int edge0 = abs(origin.x - x);
 	//int edge1 = abs(origin.y - y);
 	//int edge2 = sqrt(pow(edge0, 2) + pow(edge1, 2));
-	float percent = (origin.x-img.cols/2)/(img.cols/2.0);
+	float percent = abs(y-img.rows*0.3)/(img.cols*0.5);
 	markf = percent;
 	if (direction == 0) {
 		if (speedL == 0) {
-			speedL = 30;
-			speedR = 30 + adjust;
+			speedL = 23;
+			speedR = 23 + adjust;
 			Sleep(500);
 			return;
 		}
@@ -140,9 +143,9 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 	}
 	else if (direction == 1) {
 		if (speedR == 0) {
-			speedL = 30;
-			speedR = 30 + adjust;
-			Sleep(100);
+			speedL = 23;
+			speedR = 23 + adjust;
+			Sleep(500);
 			return;
 		}
 		int s = turningAngle * percent;
@@ -152,8 +155,10 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 			speedR = 12;
 	}
 	else if (direction == 2) {
-		speedL = 30;
-		speedR = 30 + adjust;
+		int base = 23;
+		float per = (float)(ox - x) / img.cols * 0.15;
+		speedL = base * (1 - per);
+		speedR = base * (1 + per);
 	}
 	return;
 }
@@ -164,7 +169,7 @@ void setSpeedByRed(cv::Mat img) {
 	int miny = img.rows;
 	int maxx = 0;
 	int maxy = 0;
-	for (int i = img.rows*0.5; i < img.rows*0.75; i++) { //y
+	for (int i = img.rows*0.3; i < img.rows*0.8; i++) { //y
 		cv::Vec3b* p = img.ptr<cv::Vec3b>(i);
 		for (int j = 0; j < img.cols; j++) { // x
 			if (p[j][0] == 255) {
@@ -179,6 +184,18 @@ void setSpeedByRed(cv::Mat img) {
 	if (!find) {
 		speedL = 0;
 		speedR = 0;
+		if (direction == 0) {
+			speedL = -30;
+			sendData();
+			Sleep(300);
+			speedL = 0;
+		}
+		if (direction == 1) {
+			speedR = -30;
+			sendData();
+			Sleep(300);
+			speedR = 0;
+		}
 	}
 }
 
@@ -220,17 +237,17 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 					speedL = -minSpeed;
 				//cout << speedL << endl;
 			}
-			//sendData();
+			sendData();
 		}
 		break;
 	}
 	case CV_EVENT_LBUTTONDOWN: // CV_EVENT_LBUTTONDOWN
 		if_Lmousedown = true;
 		if (!autocontrol) {
-			speedR = maxSpeed;
-			speedL = maxSpeed;
+			speedR = 30;
+			speedL = 30;
 		}
-		//sendData();
+		sendData();
 		break;
 	case CV_EVENT_LBUTTONUP:
 		if_Lmousedown = false;
@@ -238,15 +255,15 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 			speedR = 0;
 			speedL = 0;
 		}
-		//sendData();
+		sendData();
 		break;
 	case CV_EVENT_RBUTTONDOWN:
 		if_Rmousedown = true;
 		if (!autocontrol) {
-			speedR = -maxSpeed;
-			speedL = -maxSpeed;
+			speedR = -30;
+			speedL = -30;
 		}
-		//sendData();
+		sendData();
 		break;
 	case CV_EVENT_RBUTTONUP:
 		if_Rmousedown = false;
@@ -254,13 +271,14 @@ void speedControl(int event, int x, int y, int flags, void* param) {
 			speedR = 0;
 			speedL = 0;
 		}
-		//sendData();
+		sendData();
 		break;
 	case CV_EVENT_MBUTTONDOWN:
 		if (autocontrol) {
 			autocontrol = false;
 			speedR = 0;
 			speedL = 0;
+			sendData();
 		}
 		else
 			autocontrol = true;
@@ -286,7 +304,6 @@ void control() {
 			BLcount = 0;
 			BRcount = 0;
 			cv::Mat redline = img.clone();
-			cv::Mat blackline = img.clone();
 			//cv::cvtColor(redline, redline, cv::COLOR_BGR2GRAY);
 			for (int i = 0; i < img.rows; i++) { //y
 				cv::Vec3b* pOrigin = redline.ptr<cv::Vec3b>(i);
@@ -304,7 +321,8 @@ void control() {
 				}
 			}
 			setSpeedByRed(redline);
-			Sleep(500);
+			sendData();
+			Sleep(300);
 		}
 	}
 }
@@ -343,7 +361,7 @@ int main() {
 	//cv::Mat test = cv::imread("1.png");
 	
 
-	thread sending(sendData);
+	//thread sending(sendData);
 	thread controling(control);
 	while (true) {
 		cv::resizeWindow(WINDOW_NAME, cv::Size(720, 480));

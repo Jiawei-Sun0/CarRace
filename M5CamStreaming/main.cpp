@@ -26,9 +26,9 @@ int marky = 0;
 int ox;
 int oy;
 float markf = 0;
-int maxSpeed = 30;
-int minSpeed = 19 + adjust * 0.2;
-int turningAngle = -6;
+int maxSpeed = 19;
+int minSpeed = 14 + adjust * 0.2;
+int turningAngle = -5;
 int BLcount = 0;
 int BRcount = 0;
 int speedL = 0;
@@ -132,33 +132,34 @@ void calculateSpeed(cv::Mat img, int x, int y) {
 		if (speedL == 0) {
 			speedL = 23;
 			speedR = 23 + adjust;
-			Sleep(500);
+			Sleep(800);
 			return;
 		}
 		int s = turningAngle * percent;
 		speedL = minSpeed + s;
 		speedR = maxSpeed;
-		if (speedL < 12)
-			speedL = 12;
+		/*if (speedL < 12)
+			speedL = 12;*/
 	}
 	else if (direction == 1) {
 		if (speedR == 0) {
-			speedL = 23;
-			speedR = 23 + adjust;
-			Sleep(500);
+			speedL = 20;
+			speedR = 20 + adjust;
+			Sleep(800);
 			return;
 		}
 		int s = turningAngle * percent;
 		speedL = maxSpeed;
 		speedR = minSpeed + s;
-		if (speedR < 12)
-			speedR = 12;
+		/*if (speedR < 12)
+			speedR = 12;*/
 	}
 	else if (direction == 2) {
-		int base = 23;
+		int base = 20;
+		int factor = 20;
 		float per = (float)(ox - x) / img.cols * 0.15;
-		speedL = base * (1 - per);
-		speedR = base * (1 + per);
+		speedL = base - factor * per;
+		speedR = base + factor * per;
 	}
 	return;
 }
@@ -194,6 +195,14 @@ void setSpeedByRed(cv::Mat img) {
 			speedR = -30;
 			sendData();
 			Sleep(300);
+			speedR = 0;
+		}
+		if (direction == 2) {
+			speedL = -20;
+			speedR = -20;
+			sendData();
+			Sleep(300);
+			speedL = 0;
 			speedR = 0;
 		}
 	}
